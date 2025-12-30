@@ -1,0 +1,58 @@
+USERS
+
+- user_id (PK, auto-increment)
+- card_id (VARCHAR, unique) - NFC card UID
+- first_name (VARCHAR)
+- last_name (VARCHAR)
+- email (VARCHAR, unique)
+- phone (VARCHAR)
+- nif (VARCHAR, unique) - tax ID
+- membership_type (ENUM: admin, athlete, partner)
+- monthly_fee (DECIMAL) - amount they should pay monthly
+- current_balance (DECIMAL) - negative = owes money, positive = credit
+- is_active (BOOLEAN) - active membership
+- join_date (DATE)
+
+PAYMENT_TYPES
+
+- type_id (PK, auto-increment)
+- type_name (VARCHAR) - ex: "january_fee", "stringing", "water"
+
+TRANSACTIONS
+
+- transaction_id (PK, auto-increment)
+- user_id (FK -> USERS.user_id)
+- type_id (FK -> PAYMENT_TYPES.type_id)
+- amount (DECIMAL)
+- month (INT, 1-12) - for monthly fees: 1=January, 2=February, etc.
+- year (INT) - for monthly fees
+- payment_date (DATE) - when they actually paid
+- due_date (DATE) - when payment is due
+- notes (TEXT)
+
+MONTHLY_FEES
+
+- fee_id (PK, auto-increment)
+- user_id (FK -> USERS.user_id)
+- month (INT, 1-12)
+- year (INT)
+- amount_due (DECIMAL)
+- is_paid (BOOLEAN)
+- paid_date (DATE)
+- due_date (DATE)
+
+AUDIT_LOGS
+
+- log_id (PK, auto-increment)
+- timestamp (TIMESTAMP)
+- user_id (FK -> USERS.user_id, optional)
+- action (VARCHAR) - what happened
+- details (TEXT) - more information
+
+ENUMS
+MEMBERSHIP_TYPE
+
+- admin
+- athlete
+- partner
+- athlete and partner
