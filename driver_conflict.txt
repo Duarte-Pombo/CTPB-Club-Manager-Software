@@ -1,0 +1,5 @@
+lsmod | grep pn533
+sudo modprobe -r pn533_usb
+sudo modprobe -r pn533
+sudo systemctl restart pcscd
+pcscd_scan

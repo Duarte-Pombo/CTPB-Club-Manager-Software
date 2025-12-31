@@ -76,7 +76,7 @@ def setup_database(db_name="CTPB.db"):
 
     conn.commit()
     conn.close()
-    print("Base de Dados iniciada sem errors")
+    print("database initialized successfully")
 
 if __name__ == "__main__":
     setup_database()
