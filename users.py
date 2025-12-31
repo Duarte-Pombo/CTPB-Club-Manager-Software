@@ -1,16 +1,80 @@
 import sqlite3
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, ttk, simpledialog
 
 DB_NAME = "CTPB.db"
 
 def get_user_by_card(card_id):
+    """Safely retrieves user data."""
     conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE card_id = ?", (card_id,))
-    user = cursor.fetchone()
-    conn.close()
-    return user
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE card_id = ?", (card_id,))
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+class UserDashboard(tk.Toplevel):
+    def __init__(self, parent, user_data):
+        super().__init__(parent)
+        self.user_id = user_data[0]
+        self.card_id = user_data[1]
+        self.title(f"Dashboard: {user_data[2]} {user_data[3]}")
+        self.geometry("400x450")
+
+        # Header Info
+        tk.Label(self, text=f"{user_data[2]} {user_data[3]}", font=("Arial", 16, "bold")).pack(pady=10)
+
+        self.balance_var = tk.DoubleVar(value=user_data[9])
+        self.balance_label = tk.Label(self, text=f"Saldo: {self.balance_var.get():.2f}€",
+                                      font=("Arial", 14), fg="green" if self.balance_var.get() >= 0 else "red")
+        self.balance_label.pack(pady=5)
+
+        tk.Label(self, text=f"Tipo: {user_data[7]} | NIF: {user_data[6]}", fg="gray").pack()
+
+        # Action Buttons
+        btn_frame = tk.Frame(self)
+        btn_frame.pack(pady=30)
+
+        tk.Button(btn_frame, text="📥 Registar Pagamento", bg="#27ae60", fg="white", width=20, height=2,
+                  command=lambda: self.add_transaction("Pagamento", 1)).pack(pady=5)
+
+        tk.Button(btn_frame, text="📤 Registar Despesa", bg="#e67e22", fg="white", width=20, height=2,
+                  command=lambda: self.add_transaction("Despesa", -1)).pack(pady=5)
+
+    def add_transaction(self, title, multiplier):
+        amount = simpledialog.askfloat(title, f"Valor da {title} (€):", minvalue=0.01)
+        if amount:
+            final_amount = amount * multiplier
+            self.process_transaction(final_amount, title)
+
+    def process_transaction(self, amount, note):
+        conn = sqlite3.connect(DB_NAME)
+        try:
+            cursor = conn.cursor()
+            # 1. Add Transaction Record
+            cursor.execute("""
+                INSERT INTO transactions (user_id, type_id, amount, notes)
+                VALUES (?, (SELECT type_id FROM payment_types WHERE type_name = ? LIMIT 1), ?, ?)
+            """, (self.user_id, note.lower(), amount, note))
+
+            # 2. Update User Balance
+            cursor.execute("UPDATE users SET current_balance = current_balance + ? WHERE user_id = ?",
+                           (amount, self.user_id))
+
+            conn.commit()
+
+            # Update UI
+            new_balance = self.balance_var.get() + amount
+            self.balance_var.set(new_balance)
+            self.balance_label.config(text=f"Saldo: {new_balance:.2f}€",
+                                      fg="green" if new_balance >= 0 else "red")
+
+            messagebox.showinfo("Sucesso", f"{note} de {abs(amount):.2f}€ registada.")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro na transação: {e}")
+        finally:
+            conn.close()
 
 class UserRegistrationWindow(tk.Toplevel):
     def __init__(self, parent, card_id):

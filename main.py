@@ -60,19 +60,13 @@ class CTPB:
             time.sleep(0.5)
 
     def show_card_popup(self, card_id):
-        """Checks database and opens either Info or Registration."""
         user_data = users.get_user_by_card(card_id)
 
         if user_data:
-            # User exists: Show info
-            # user_data indices match your table: 2=first_name, 3=last_name, 9=balance
-            name = f"{user_data[2]} {user_data[3]}"
-            balance = user_data[9]
-            messagebox.showinfo("Sócio Reconhecido",
-                                f"Bem-vindo, {name}!\nSaldo Atual: {balance}€")
+            # Open the new Dashboard instead of a simple messagebox
+            users.UserDashboard(self.root, user_data)
         else:
-            # New User: Open registration window
-            if messagebox.askyesno("Desconhecido", f"Cartão {card_id} não registado.\nDeseja registar novo sócio?"):
+            if messagebox.askyesno("Desconhecido", f"Cartão {card_id} não registado.\nDeseja registar?"):
                 users.UserRegistrationWindow(self.root, card_id)
 
 if __name__ == "__main__":
