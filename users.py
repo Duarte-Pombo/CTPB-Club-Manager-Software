@@ -4,15 +4,20 @@ from tkinter import messagebox, ttk, simpledialog
 
 DB_NAME = "CTPB.db"
 
+def get_connection():
+    """Returns a connection with a timeout to prevent 'database locked' errors."""
+    return sqlite3.connect(DB_NAME, timeout=10)
+
 def get_user_by_card(card_id):
-    """Safely retrieves user data."""
-    conn = sqlite3.connect(DB_NAME)
+    """Safely retrieves user data using a context manager."""
     try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE card_id = ?", (card_id,))
-        return cursor.fetchone()
-    finally:
-        conn.close()
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE card_id = ?", (card_id,))
+            return cursor.fetchone()
+    except sqlite3.Error as e:
+        print(f"Database error in get_user_by_card: {e}")
+        return None
 
 class UserDashboard(tk.Toplevel):
     def __init__(self, parent, user_data):
@@ -199,3 +204,36 @@ class UserRegistrationWindow(tk.Toplevel):
             messagebox.showerror("Erro de Duplicação", "Este NIF, Email ou Cartão já existe no sistema.")
         except Exception as e:
             messagebox.showerror("Erro Crítico", f"Não foi possível gravar: {e}")
+    
+    def save_user(self):
+        data = {k: v.get().strip() for k, v in self.entries.items()}
+        data['card_id'] = self.card_id
+        data['membership_type'] = self.membership_type.get()
+
+        m_type = data['membership_type']
+        if m_type in ['atleta', 'atleta e sócio']:
+            data['monthly_fee'] = self.entry_monthly.get().strip() or 0.0
+        else:
+            data['monthly_fee'] = 0.0
+
+        if not data['first_name'] or not data['last_name']:
+            messagebox.showwarning("Aviso", "Nome e Apelido são obrigatórios!")
+            return
+
+        # Improved Database Execution
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO users (card_id, first_name, last_name, email, phone, nif, membership_type, monthly_fee)
+                    VALUES (:card_id, :first_name, :last_name, :email, :phone, :nif, :membership_type, :monthly_fee)
+                ''', data)
+                # conn.commit() is called automatically by the context manager
+            
+            messagebox.showinfo("Sucesso", f"Membro {data['first_name']} registado!")
+            self.destroy()
+
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Erro", "Este NIF, Email ou Cartão já existe.")
+        except Exception as e:
+            messagebox.showerror("Erro Crítico", f"Erro ao gravar: {e}")
