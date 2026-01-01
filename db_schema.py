@@ -15,7 +15,7 @@ def setup_database(db_name="CTPB.db"):
         last_name TEXT NOT NULL,
         email TEXT UNIQUE,
         phone TEXT,
-        nif TEXT DEFAULT 999999990,
+        nif TEXT DEFAULT '999999990',
         membership_type TEXT CHECK(membership_type IN ('admin', 'atleta', 'sócio', 'atleta e sócio')),
         monthly_fee REAL DEFAULT 0.0,
         current_balance REAL DEFAULT 0.0,

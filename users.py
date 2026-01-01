@@ -85,7 +85,7 @@ class UserRegistrationWindow(tk.Toplevel):
     def __init__(self, parent, card_id):
         super().__init__(parent)
         self.title("Registar Novo Sócio")
-        self.geometry("450x600")
+        self.geometry("450x650")
         self.card_id = card_id
         self.entries = {}
 
@@ -97,7 +97,7 @@ class UserRegistrationWindow(tk.Toplevel):
         self.form_frame = tk.Frame(self)
         self.form_frame.pack(fill="both", expand=True, padx=30, pady=10)
 
-        # Fields definition: (Label, DB_Key, is_mandatory)
+        # Fields definition
         self.field_definitions = [
             ("Nome *", "first_name", True),
             ("Apelido *", "last_name", True),
@@ -114,7 +114,7 @@ class UserRegistrationWindow(tk.Toplevel):
             entry.pack(side="right", expand=True, fill="x")
             self.entries[key] = entry
 
-        # 3. Membership Type (The Logic Trigger)
+        # 3. Membership Type
         row = tk.Frame(self.form_frame)
         row.pack(fill="x", pady=10)
         tk.Label(row, text="Tipo de Sócio *", width=15, anchor="w", font=("Arial", 10, "bold")).pack(side="left")
@@ -127,21 +127,17 @@ class UserRegistrationWindow(tk.Toplevel):
         self.quota_frame = tk.LabelFrame(self.form_frame, text="Configuração de Quotas", padx=10, pady=10)
         self.quota_frame.pack(fill="x", pady=10)
 
-        # Monthly Fee field
         self.monthly_row = tk.Frame(self.quota_frame)
         tk.Label(self.monthly_row, text="Quota Mensal (€) *", width=15, anchor="w").pack(side="left")
         self.entry_monthly = tk.Entry(self.monthly_row)
         self.entry_monthly.pack(side="right", expand=True, fill="x")
 
-        # Yearly Fee field (Note: We'll store this in the notes or a specific column if added later,
-        # for now let's assume it's part of the user setup logic)
         self.yearly_row = tk.Frame(self.quota_frame)
         tk.Label(self.yearly_row, text="Quota Anual (€) *", width=15, anchor="w").pack(side="left")
         self.entry_yearly = tk.Entry(self.yearly_row)
-        self.entry_yearly.insert(0, "40.00") # Default 40€
-        self.entry_yearly.pack(side="right", expand=True, fill="x")
+        self.entry_yearly.insert(0, "40.00")
+        self.yearly_row.pack(fill="x", pady=2) # Default visible for athletes/socios
 
-        # Initialize visibility
         self.toggle_quota_fields()
 
         # 5. Submit Button
@@ -150,8 +146,6 @@ class UserRegistrationWindow(tk.Toplevel):
 
     def toggle_quota_fields(self, event=None):
         m_type = self.membership_type.get()
-
-        # Hide everything first
         self.monthly_row.pack_forget()
         self.yearly_row.pack_forget()
 
@@ -162,78 +156,52 @@ class UserRegistrationWindow(tk.Toplevel):
         elif m_type == 'atleta e sócio':
             self.monthly_row.pack(fill="x", pady=2)
             self.yearly_row.pack(fill="x", pady=2)
-        # 'admin' shows no quota fields
 
     def save_user(self):
-        # Gather basic data
+        # 1. Gather and Clean Data
         data = {k: v.get().strip() for k, v in self.entries.items()}
         data['card_id'] = self.card_id
         data['membership_type'] = self.membership_type.get()
 
-        # Determine monthly fee based on type
-        m_type = data['membership_type']
-        if m_type in ['atleta', 'atleta e sócio']:
-            data['monthly_fee'] = self.entry_monthly.get().strip()
-        else:
-            data['monthly_fee'] = 0.0
-
-        # 1. Validation Logic
+        # Mandatory Field Check
         if not data['first_name'] or not data['last_name']:
             messagebox.showwarning("Aviso", "Nome e Apelido são obrigatórios!")
             return
 
-        if m_type in ['atleta', 'atleta e sócio'] and not data['monthly_fee']:
-            messagebox.showwarning("Aviso", "Defina o valor da quota mensal para atletas!")
-            return
+        # NIF Logic: Use 999999990 if empty
+        user_nif = data.get('nif') or "999999990"
+        data['nif'] = user_nif
 
-        # 2. Database Execution
-        try:
-            conn = sqlite3.connect(DB_NAME)
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO users (card_id, first_name, last_name, email, phone, nif, membership_type, monthly_fee)
-                VALUES (:card_id, :first_name, :last_name, :email, :phone, :nif, :membership_type, :monthly_fee)
-            ''', data)
-            conn.commit()
-            conn.close()
-
-            messagebox.showinfo("Sucesso", f"Membro {data['first_name']} registado com sucesso!")
-            self.destroy()
-
-        except sqlite3.IntegrityError:
-            messagebox.showerror("Erro de Duplicação", "Este NIF, Email ou Cartão já existe no sistema.")
-        except Exception as e:
-            messagebox.showerror("Erro Crítico", f"Não foi possível gravar: {e}")
-    
-    def save_user(self):
-        data = {k: v.get().strip() for k, v in self.entries.items()}
-        data['card_id'] = self.card_id
-        data['membership_type'] = self.membership_type.get()
-
+        # Monthly Fee Logic
         m_type = data['membership_type']
         if m_type in ['atleta', 'atleta e sócio']:
             data['monthly_fee'] = self.entry_monthly.get().strip() or 0.0
         else:
             data['monthly_fee'] = 0.0
 
-        if not data['first_name'] or not data['last_name']:
-            messagebox.showwarning("Aviso", "Nome e Apelido são obrigatórios!")
-            return
-
-        # Improved Database Execution
+        # 2. Database Execution
         try:
-            with get_connection() as conn:
+            with get_connection() as conn: # Use helper with timeout
                 cursor = conn.cursor()
+
+                # Check uniqueness ONLY if NIF is not the generic one
+                if user_nif != "999999990":
+                    cursor.execute("SELECT user_id FROM users WHERE nif = ?", (user_nif,))
+                    if cursor.fetchone():
+                        messagebox.showerror("Erro", f"O NIF {user_nif} já está registado noutro sócio.")
+                        return
+
+                # Execute Insert
                 cursor.execute('''
                     INSERT INTO users (card_id, first_name, last_name, email, phone, nif, membership_type, monthly_fee)
                     VALUES (:card_id, :first_name, :last_name, :email, :phone, :nif, :membership_type, :monthly_fee)
                 ''', data)
-                # conn.commit() is called automatically by the context manager
-            
+
+            # 3. Finalize
             messagebox.showinfo("Sucesso", f"Membro {data['first_name']} registado!")
             self.destroy()
 
-        except sqlite3.IntegrityError:
-            messagebox.showerror("Erro", "Este NIF, Email ou Cartão já existe.")
+        except sqlite3.IntegrityError as e:
+            messagebox.showerror("Erro", "O Email ou ID do Cartão já existe no sistema.")
         except Exception as e:
             messagebox.showerror("Erro Crítico", f"Erro ao gravar: {e}")
