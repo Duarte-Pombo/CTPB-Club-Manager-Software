@@ -3,6 +3,7 @@ from tkinter import messagebox
 import threading
 import time
 import users
+import user_dashboard
 from smartcard.System import readers
 from smartcard.util import toHexString
 
@@ -64,7 +65,7 @@ class CTPB:
 
         if user_data:
             # Open the new Dashboard instead of a simple messagebox
-            users.UserDashboard(self.root, user_data)
+            user_dashboard.UserDashboard(self.root, user_data)
         else:
             if messagebox.askyesno("Desconhecido", f"Cartão {card_id} não registado.\nDeseja registar?"):
                 users.UserRegistrationWindow(self.root, card_id)
