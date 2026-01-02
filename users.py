@@ -113,10 +113,13 @@ class UserRegistrationWindow(tk.Toplevel):
         # Monthly Fee Logic
         m_type = data['membership_type']
         if m_type in ['atleta', 'atleta e sócio']:
-            data['monthly_fee'] = self.entry_monthly.get().strip() or 0.0
+            val = self.entry_monthly.get().strip()
+            try:
+                data['monthly_fee'] = float(val) if val else 0.0
+            except ValueError:
+                data['monthly_fee'] = 0.0
         else:
             data['monthly_fee'] = 0.0
-
         # 2. Database Execution
         try:
             with get_connection() as conn: # Use helper with timeout
