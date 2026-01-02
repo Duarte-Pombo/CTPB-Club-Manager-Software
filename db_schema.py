@@ -40,6 +40,8 @@ def setup_database(db_name="CTPB.db"):
         type_id INTEGER NOT NULL,
         amount REAL NOT NULL,
         payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        payment_method TEXT DEFAULT 'POS',
+        is_settled BOOLEAN DEFAULT 0
         notes TEXT,
         FOREIGN KEY (user_id) REFERENCES users (user_id),
         FOREIGN KEY (type_id) REFERENCES payment_types (type_id)
