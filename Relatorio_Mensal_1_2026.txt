@@ -1,0 +1,36 @@
+========================================
+RELATÓRIO MENSAL - 01/2026
+========================================
+
+--- Alugueres
+Transferência        :    10.00 €
+Numerário            :    10.00 €
+Total                :    20.00 €
+
+--- Encordoamento
+Numerário            :     5.00 €
+Total                :     5.00 €
+
+--- Quota: AGO
+Numerário            :    65.00 €
+Total                :    65.00 €
+
+--- Quota: DEZ
+Numerário            :    65.00 €
+Total                :    65.00 €
+
+--- Quota: MAR
+Multibanco           :    65.00 €
+Total                :    65.00 €
+
+--- Quota: Quota Anual
+Transferência        :    40.00 €
+Total                :    40.00 €
+
+--- Quota: Seguro
+Numerário            :    15.00 €
+Total                :    15.00 €
+
+----------------------------------------
+TOTAL GERAL        :   275.00 €
+========================================

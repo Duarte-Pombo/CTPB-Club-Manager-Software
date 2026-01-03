@@ -1,8 +1,9 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog, simpledialog, scrolledtext
 import sqlite3
 import user_dashboard
 from datetime import datetime
+import os
 
 DB_NAME = "CTPB.db"
 
@@ -33,8 +34,7 @@ class MainDashboard(tk.Tk):
 
         tk.Label(tool_frame, text="🔍 Pesquisar:", bg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
         self.search_var = tk.StringVar()
-        
-        # --- FIX: Use trace_add instead of trace for Python 3.14+ ---
+        # Trace add for Python 3.14 compatibility
         self.search_var.trace_add("write", lambda *args: self.refresh_users()) 
         
         entry_search = tk.Entry(tool_frame, textvariable=self.search_var, width=30, font=("Arial", 11))
@@ -81,10 +81,16 @@ class MainDashboard(tk.Tk):
         bar_frame.pack_propagate(False)
 
         btn_style = {"bg": "#34495e", "fg": "white", "font": ("Arial", 10, "bold"), "bd": 0, "padx": 15, "pady": 10}
-        tk.Button(bar_frame, text="📄 Relatório Mensal", command=self.not_implemented, **btn_style).pack(side="left", padx=10, pady=10)
-        tk.Button(bar_frame, text="📊 Relatório Anual", command=self.not_implemented, **btn_style).pack(side="left", padx=10, pady=10)
+        
+        # Report Buttons
+        tk.Button(bar_frame, text="📄 Relatório Mensal", command=self.generate_monthly_report, **btn_style).pack(side="left", padx=10, pady=10)
+        tk.Button(bar_frame, text="📊 Relatório Anual", command=self.generate_yearly_report, **btn_style).pack(side="left", padx=10, pady=10)
+        
+        # Admin Buttons
         tk.Button(bar_frame, text="🔒 Cópia Segurança", command=self.not_implemented, **btn_style).pack(side="right", padx=10, pady=10)
         tk.Button(bar_frame, text="🗑️ Reset Database", bg="#c0392b", fg="white", font=("Arial", 10, "bold"), bd=0, padx=15, pady=10, command=self.not_implemented).pack(side="right", padx=10, pady=10)
+
+    # --- MAIN LOGIC ---
 
     def refresh_users(self):
         for item in self.tree.get_children(): self.tree.delete(item)
@@ -92,11 +98,11 @@ class MainDashboard(tk.Tk):
         search_term = self.search_var.get().strip().lower()
         target_year = self.year_var.get()
         
-        # Soft Delete Check: only show active users
         query = "SELECT user_id, first_name, last_name, nif, email, membership_type, phone, current_balance, monthly_fee FROM users WHERE is_active = 1"
         params = []
 
         if search_term:
+            # Concatenate first and last name for full name search
             query += " AND (lower(first_name || ' ' || last_name) LIKE ? OR CAST(user_id AS TEXT) LIKE ? OR nif LIKE ?)"
             term_wild = f"%{search_term}%"
             params.extend([term_wild, term_wild, term_wild])
@@ -153,5 +159,152 @@ class MainDashboard(tk.Tk):
             except Exception as e:
                 messagebox.showerror("Erro", f"Erro ao desativar: {e}")
 
+    # --- REPORT LOGIC ---
+
+    def generate_monthly_report(self):
+        # 1. Ask for Month and Year
+        now = datetime.now()
+        year = simpledialog.askinteger("Relatório Mensal", "Ano:", initialvalue=now.year, minvalue=2020, maxvalue=2030)
+        if not year: return
+        month = simpledialog.askinteger("Relatório Mensal", "Mês (1-12):", initialvalue=now.month, minvalue=1, maxvalue=12)
+        if not month: return
+
+        # 2. Define Date Range (Start of month to End of month)
+        start_date = f"{year}-{month:02d}-01"
+        if month == 12:
+            end_date = f"{year+1}-01-01"
+        else:
+            end_date = f"{year}-{month+1:02d}-01"
+
+        title = f"RELATÓRIO MENSAL - {month:02d}/{year}"
+        self.build_and_save_report(title, start_date, end_date, f"Relatorio_Mensal_{month}_{year}.txt")
+
+    def generate_yearly_report(self):
+        # 1. Ask for Year
+        now = datetime.now()
+        year = simpledialog.askinteger("Relatório Anual", "Ano:", initialvalue=now.year, minvalue=2020, maxvalue=2030)
+        if not year: return
+
+        start_date = f"{year}-01-01"
+        end_date = f"{year+1}-01-01"
+
+        title = f"RELATÓRIO ANUAL - {year}"
+        self.build_and_save_report(title, start_date, end_date, f"Relatorio_Anual_{year}.txt")
+
+    def build_and_save_report(self, title, start_date, end_date, default_filename):
+        """Core logic to fetch data, organize it, and save to file."""
+        
+        # Data Structure: { "Category": { "Method": Amount } }
+        report_data = {}
+
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                # Fetch only INCOME (amount > 0) for the report
+                # If expenses are needed, remove 'amount > 0'
+                cursor.execute("""
+                    SELECT amount, payment_method, notes, payment_date 
+                    FROM transactions 
+                    WHERE payment_date >= ? AND payment_date < ? AND amount > 0
+                    ORDER BY payment_date
+                """, (start_date, end_date))
+                
+                rows = cursor.fetchall()
+
+            if not rows:
+                messagebox.showinfo("Info", "Sem movimentos registados neste período.")
+                return
+
+            total_overall = 0.0
+
+            for amt, method, note, date in rows:
+                # Categorization Logic based on 'notes' string
+                category = "Outros"
+                note_lower = note.lower()
+
+                if "quota:" in note_lower:
+                    # Example: "Quota: JAN" -> Category: "Quota: JAN"
+                    # Or group all quotas? Prompt implies "--- January Quota"
+                    category = note  # Keep the full string like "Quota: JAN" as header
+                elif "aluguer" in note_lower:
+                    category = "Alugueres"
+                elif "encordoamento" in note_lower:
+                    category = "Encordoamento"
+                elif "bar" in note_lower:
+                    category = "Bar"
+                elif "pagamento:" in note_lower:
+                    # This is debt repayment
+                    category = "Regularização Dívidas"
+                
+                # Sanitize method
+                if not method: method = "Indefinido"
+
+                # Initialize keys if missing
+                if category not in report_data:
+                    report_data[category] = {}
+                if method not in report_data[category]:
+                    report_data[category][method] = 0.0
+
+                report_data[category][method] += amt
+                total_overall += amt
+
+            # --- FORMAT TEXT ---
+            lines = []
+            lines.append("="*40)
+            lines.append(f"{title}")
+            lines.append("="*40)
+            lines.append("")
+
+            # Sort categories to keep "Quota" together if possible
+            sorted_cats = sorted(report_data.keys())
+
+            for cat in sorted_cats:
+                lines.append(f"--- {cat}")
+                cat_total = 0.0
+                for method, val in report_data[cat].items():
+                    lines.append(f"{method:<20} : {val:>8.2f} €")
+                    cat_total += val
+                lines.append(f"{'Total':<20} : {cat_total:>8.2f} €")
+                lines.append("")
+
+            lines.append("-" * 40)
+            lines.append(f"TOTAL GERAL        : {total_overall:>8.2f} €")
+            lines.append("="*40)
+            
+            report_content = "\n".join(lines)
+
+            # --- SAVE FILE ---
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".txt",
+                filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+                initialfile=default_filename,
+                title="Guardar Relatório"
+            )
+
+            if file_path:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(report_content)
+                messagebox.showinfo("Sucesso", f"Relatório guardado em:\n{file_path}")
+            else:
+                # Fallback: Show in window if user cancels save
+                self.show_report_window(title, report_content)
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao gerar relatório: {e}")
+
+    def show_report_window(self, title, content):
+        win = tk.Toplevel(self)
+        win.title(title)
+        win.geometry("400x600")
+        
+        txt = scrolledtext.ScrolledText(win, font=("Courier", 10))
+        txt.pack(fill="both", expand=True)
+        txt.insert("end", content)
+        txt.config(state="disabled")
+
     def not_implemented(self):
         messagebox.showinfo("Em construção", "Esta funcionalidade será implementada no próximo passo.")
+
+if __name__ == "__main__":
+    app = MainDashboard()
+    app.mainloop()
