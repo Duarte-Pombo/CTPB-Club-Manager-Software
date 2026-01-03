@@ -94,9 +94,9 @@ class QuotaActionDialog(tk.Toplevel):
         btn_frame = tk.Frame(self)
         btn_frame.pack(pady=10, fill="x", padx=10)
 
-        tk.Button(btn_frame, text="💰 Total", bg="#27ae60", fg="white", command=self.set_pay, height=2, width=12).pack(side="left", padx=5)
-        tk.Button(btn_frame, text="⚠️ Parcial", bg="#f1c40f", fg="black", command=self.set_partial, height=2, width=12).pack(side="left", padx=5)
-        tk.Button(btn_frame, text="🚫 Ausente", bg="#7f8c8d", fg="white", command=self.set_absent, height=2, width=12).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Total", bg="#27ae60", fg="white", command=self.set_pay, height=2, width=12).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Parcial", bg="#f1c40f", fg="black", command=self.set_partial, height=2, width=12).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Ausente", bg="#7f8c8d", fg="white", command=self.set_absent, height=2, width=12).pack(side="left", padx=5)
 
         self.wait_window(self)
 
@@ -124,9 +124,9 @@ class QuotaManageDialog(tk.Toplevel):
         btn_frame.pack(pady=10, fill="x", padx=10)
 
         if is_partial:
-            tk.Button(btn_frame, text="💰 Liquidar Restante", bg="#2980b9", fg="white", command=self.set_pay_rest, height=2).pack(side="left", fill="x", expand=True, padx=5)
+            tk.Button(btn_frame, text="Liquidar Restante", bg="#2980b9", fg="white", command=self.set_pay_rest, height=2).pack(side="left", fill="x", expand=True, padx=5)
 
-        tk.Button(btn_frame, text="🗑️ Anular / Devolver", bg="#c0392b", fg="white", command=self.set_cancel, height=2).pack(side="right", fill="x", expand=True, padx=5)
+        tk.Button(btn_frame, text="Anular / Devolver", bg="#c0392b", fg="white", command=self.set_cancel, height=2).pack(side="right", fill="x", expand=True, padx=5)
 
         self.wait_window(self)
 
@@ -180,17 +180,17 @@ class UserDashboard(tk.Toplevel):
         info_frame = tk.Frame(sidebar, bg="#2c3e50")
         info_frame.pack(pady=5)
         
-        tk.Label(info_frame, text=f"📧 {self.email}", bg="#2c3e50", fg="#95a5a6", font=("Arial", 9)).pack(anchor="center")
-        tk.Label(info_frame, text=f"📞 {self.phone}", bg="#2c3e50", fg="#95a5a6", font=("Arial", 9)).pack(anchor="center")
-        tk.Label(info_frame, text=f"🆔 {self.nif}", bg="#2c3e50", fg="#95a5a6", font=("Arial", 9)).pack(anchor="center")
+        tk.Label(info_frame, text=f"email: {self.email}", bg="#2c3e50", fg="#95a5a6", font=("Arial", 9)).pack(anchor="center")
+        tk.Label(info_frame, text=f"phone: {self.phone}", bg="#2c3e50", fg="#95a5a6", font=("Arial", 9)).pack(anchor="center")
+        tk.Label(info_frame, text=f"NIF: {self.nif}", bg="#2c3e50", fg="#95a5a6", font=("Arial", 9)).pack(anchor="center")
         # ------------------------------
 
         self.lbl_balance = tk.Label(sidebar, text="0.00€", bg="#2c3e50", fg="white", font=("Arial", 24, "bold"))
         self.lbl_balance.pack(pady=30)
 
         btn_style = {"font": ("Arial", 11), "bd": 0, "pady": 8, "cursor": "hand2"}
-        tk.Button(sidebar, text="➕ Nova Despesa (Dívida)", bg="#e74c3c", fg="white", width=25, **btn_style, command=self.add_expense).pack(pady=10)
-        tk.Button(sidebar, text="💰 Registar Pagamento", bg="#27ae60", fg="white", width=25, **btn_style, command=self.add_generic_payment).pack(pady=10)
+        tk.Button(sidebar, text="Nova Dívida", bg="#e74c3c", fg="white", width=25, **btn_style, command=self.add_expense).pack(pady=10)
+        tk.Button(sidebar, text="Registar Pagamento", bg="#27ae60", fg="white", width=25, **btn_style, command=self.add_generic_payment).pack(pady=10)
 
     def create_main_area(self):
         main_frame = tk.Frame(self, bg="#ecf0f1")
@@ -215,7 +215,7 @@ class UserDashboard(tk.Toplevel):
         split_frame.pack(fill="both", expand=True, pady=10)
 
         # Pending
-        left_box = tk.LabelFrame(split_frame, text="⚠️ Dívidas Pendentes", bg="#ecf0f1", font=("Arial", 10, "bold"), fg="#c0392b")
+        left_box = tk.LabelFrame(split_frame, text="Dívidas Pendentes", bg="#ecf0f1", font=("Arial", 10, "bold"), fg="#c0392b")
         left_box.pack(side="left", fill="both", expand=True, padx=(0, 10))
         cols_pend = ("ID", "Data", "Desc", "Valor")
         self.tree_pending = ttk.Treeview(left_box, columns=cols_pend, show="headings")
@@ -228,7 +228,7 @@ class UserDashboard(tk.Toplevel):
         tk.Label(left_box, text="* Duplo clique para liquidar", bg="#ecf0f1", fg="grey", font=("Arial", 8)).pack(anchor="w")
 
         # History
-        right_box = tk.LabelFrame(split_frame, text="📜 Histórico de Pagamentos", bg="#ecf0f1", font=("Arial", 10, "bold"), fg="#27ae60")
+        right_box = tk.LabelFrame(split_frame, text="Histórico de Pagamentos", bg="#ecf0f1", font=("Arial", 10, "bold"), fg="#27ae60")
         right_box.pack(side="right", fill="both", expand=True)
         cols_hist = ("Data", "Desc", "Valor", "Método")
         self.tree_history = ttk.Treeview(right_box, columns=cols_hist, show="headings")

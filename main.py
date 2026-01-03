@@ -22,7 +22,6 @@ class CTPB_App:
 
     def nfc_listener(self):
         """Background thread that waits for NFC card taps."""
-        print("NFC Listener Started...")
         while True:
             try:
                 r = readers()
@@ -40,7 +39,6 @@ class CTPB_App:
 
                     if sw1 == 0x90 and sw2 == 0x00:
                         card_id = toHexString(data)
-                        print(f"Card Detected: {card_id}")
                         
                         # Trigger UI action safely from the main thread
                         self.app.after(0, self.handle_card_tap, card_id)

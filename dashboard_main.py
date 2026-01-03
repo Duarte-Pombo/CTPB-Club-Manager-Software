@@ -25,7 +25,7 @@ class MonthSelectorDialog(tk.Toplevel):
         btn_frame = tk.Frame(self, pady=15, bg="#ecf0f1")
         btn_frame.pack(side="bottom", fill="x")
         
-        tk.Button(btn_frame, text="✅ APLICAR FILTRO", bg="#27ae60", fg="white", font=("Arial", 11, "bold"),
+        tk.Button(btn_frame, text="APLICAR FILTRO", bg="#27ae60", fg="white", font=("Arial", 11, "bold"),
                   command=self.apply, height=2).pack(fill="x", padx=20)
 
         # --- 2. SCROLLABLE CONTENT AREA ---
@@ -103,13 +103,13 @@ class MainDashboard(tk.Tk):
         tool_frame.pack(fill="x", side="top")
 
         # SEARCH
-        tk.Label(tool_frame, text="🔍 Pesquisar:", bg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
+        tk.Label(tool_frame, text="Pesquisar:", bg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *args: self.refresh_users()) 
         tk.Entry(tool_frame, textvariable=self.search_var, width=20, font=("Arial", 11)).pack(side="left", padx=5)
 
         # SEASON (ÉPOCA)
-        tk.Label(tool_frame, text="📅 Época:", bg="white", font=("Arial", 10, "bold")).pack(side="left", padx=(15, 5))
+        tk.Label(tool_frame, text="Época:", bg="white", font=("Arial", 10, "bold")).pack(side="left", padx=(15, 5))
         self.year_var = tk.IntVar(value=datetime.now().year)
         tk.Spinbox(tool_frame, from_=2020, to=2030, textvariable=self.year_var, width=5, command=self.refresh_users).pack(side="left", padx=5)
 
@@ -122,7 +122,7 @@ class MainDashboard(tk.Tk):
         self.btn_quota_filter.pack(side="left", padx=10)
         
         # EXPORT BUTTON
-        tk.Button(tool_frame, text="🖨️ Imprimir Lista", bg="#95a5a6", fg="white", command=self.export_list).pack(side="right", padx=10)
+        tk.Button(tool_frame, text="Imprimir Lista", bg="#95a5a6", fg="white", command=self.export_list).pack(side="right", padx=10)
 
     def open_month_selector(self):
         dlg = MonthSelectorDialog(self)
@@ -168,12 +168,12 @@ class MainDashboard(tk.Tk):
 
         btn_style = {"bg": "#34495e", "fg": "white", "font": ("Arial", 10, "bold"), "bd": 0, "padx": 15, "pady": 10}
         
-        tk.Button(bar_frame, text="📄 Relatório Mensal", command=self.generate_monthly_report, **btn_style).pack(side="left", padx=10, pady=10)
-        tk.Button(bar_frame, text="📊 Relatório Anual", command=self.generate_yearly_report, **btn_style).pack(side="left", padx=10, pady=10)
+        tk.Button(bar_frame, text="Relatório Mensal", command=self.generate_monthly_report, **btn_style).pack(side="left", padx=10, pady=10)
+        tk.Button(bar_frame, text="Relatório Anual", command=self.generate_yearly_report, **btn_style).pack(side="left", padx=10, pady=10)
         
-        tk.Button(bar_frame, text="🔒 Cópia Segurança", command=self.backup_database, **btn_style).pack(side="right", padx=10, pady=10)
-        tk.Button(bar_frame, text="📂 Restaurar Cópia", command=self.restore_database, **btn_style).pack(side="right", padx=10, pady=10)
-        tk.Button(bar_frame, text="🗑️ Reset Database", bg="#c0392b", fg="white", font=("Arial", 10, "bold"), bd=0, padx=15, pady=10, command=self.reset_database).pack(side="right", padx=10, pady=10)
+        tk.Button(bar_frame, text="Cópia Segurança", command=self.backup_database, **btn_style).pack(side="right", padx=10, pady=10)
+        tk.Button(bar_frame, text="Restaurar Cópia", command=self.restore_database, **btn_style).pack(side="right", padx=10, pady=10)
+        tk.Button(bar_frame, text="Reset Database", bg="#c0392b", fg="white", font=("Arial", 10, "bold"), bd=0, padx=15, pady=10, command=self.reset_database).pack(side="right", padx=10, pady=10)
 
     # --- MAIN FILTER LOGIC ---
 
@@ -234,7 +234,7 @@ class MainDashboard(tk.Tk):
                 if balance < 0 or (self.filter_months_list and has_missing_payment):
                      debt_tag = "has_debt"
 
-                self.tree.insert("", "end", values=(uid, full_name, nif, email, mtype, phone, "❌"), tags=(debt_tag,))
+                self.tree.insert("", "end", values=(uid, full_name, nif, email, mtype, phone, "X"), tags=(debt_tag,))
 
     # --- EXPORT ---
     def export_list(self):
