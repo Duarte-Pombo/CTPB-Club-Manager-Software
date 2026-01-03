@@ -16,7 +16,6 @@ class TransactionDialog(tk.Toplevel):
         self.result = None
         self.is_expense = is_expense
 
-        # Center the window
         self.transient(parent)
         self.grab_set()
 
@@ -38,17 +37,15 @@ class TransactionDialog(tk.Toplevel):
             self.combo_cat.pack()
             self.combo_cat.bind("<<ComboboxSelected>>", self.toggle_other)
 
-            # Entry for "Outro" or extra details
             self.entry_desc = tk.Entry(self, width=33)
             self.entry_desc.pack(pady=5)
             self.entry_desc.insert(0, "Detalhes opcionais...")
             self.entry_desc.config(fg="grey")
             self.entry_desc.bind("<FocusIn>", lambda e: self.entry_desc.delete(0, "end") if "Detalhes" in self.entry_desc.get() else None)
         else:
-            # Simple description for payments
             self.entry_desc = tk.Entry(self, width=33)
             self.entry_desc.pack(pady=5)
-            self.entry_desc.insert(0, title) # Pre-fill with title (e.g. "Quota Jan")
+            self.entry_desc.insert(0, title) 
 
         # 2. Amount
         tk.Label(self, text="Valor (€):", font=("Arial", 10, "bold")).pack(pady=(15, 5))
@@ -56,11 +53,7 @@ class TransactionDialog(tk.Toplevel):
         self.entry_amount = tk.Entry(self, textvariable=self.amount_var, width=15, justify="center", font=("Arial", 12))
         self.entry_amount.pack()
 
-        # 3. Payment Method (Only relevant for Paying debts or Income)
-        # For Expenses (creating debt), method is usually NULL until paid,
-        # BUT user might pay immediately. For now, let's keep it simple:
-        # If Expense -> No Method needed (it goes to Debt).
-        # If Payment -> Method needed.
+        # 3. Payment Method (Only for Payments)
         self.method_var = tk.StringVar(value="Numerário")
         if not is_expense:
             tk.Label(self, text="Método de Pagamento:", font=("Arial", 10, "bold")).pack(pady=(15, 5))
@@ -84,7 +77,7 @@ class TransactionDialog(tk.Toplevel):
     def on_confirm(self):
         try:
             val = float(self.entry_amount.get())
-            if val <= 0: raise ValueError
+            if val < 0: raise ValueError # Allow 0 for corrections, but usually positive input here
         except ValueError:
             messagebox.showerror("Erro", "Valor inválido.")
             return
@@ -105,6 +98,42 @@ class TransactionDialog(tk.Toplevel):
             "method": self.method_var.get() if not self.is_expense else None
         }
         self.destroy()
+
+class QuotaActionDialog(tk.Toplevel):
+    """Specific dialog to choose between Paying or Marking as Absent"""
+    def __init__(self, parent, month_name):
+        super().__init__(parent)
+        self.title(f"Ação: {month_name}")
+        self.geometry("350x180")
+        self.action = None
+        
+        self.transient(parent)
+        self.grab_set()
+
+        tk.Label(self, text=f"Quota: {month_name}", font=("Arial", 12, "bold")).pack(pady=15)
+        tk.Label(self, text="Selecione uma ação:", fg="grey").pack()
+
+        btn_frame = tk.Frame(self)
+        btn_frame.pack(pady=20, fill="x", padx=20)
+
+        # Button: PAY
+        tk.Button(btn_frame, text="💰 Pagar Quota", bg="#27ae60", fg="white", font=("Arial", 10, "bold"),
+                  command=self.set_pay, height=2).pack(side="left", fill="x", expand=True, padx=5)
+
+        # Button: ABSENT
+        tk.Button(btn_frame, text="🚫 Marcar Ausente", bg="#7f8c8d", fg="white", font=("Arial", 10),
+                  command=self.set_absent, height=2).pack(side="right", fill="x", expand=True, padx=5)
+
+        self.wait_window(self)
+
+    def set_pay(self):
+        self.action = "pay"
+        self.destroy()
+
+    def set_absent(self):
+        self.action = "absent"
+        self.destroy()
+
 
 # --- MAIN DASHBOARD ---
 
@@ -178,7 +207,6 @@ class UserDashboard(tk.Toplevel):
         self.tree_pending.column("Valor", width=60, anchor="e")
         self.tree_pending.pack(fill="both", expand=True, pady=5)
 
-        # Double click to Pay
         self.tree_pending.bind("<Double-1>", self.on_pending_double_click)
         tk.Label(left_box, text="* Duplo clique para liquidar", bg="#ecf0f1", fg="grey", font=("Arial", 8)).pack(anchor="w")
 
@@ -211,15 +239,13 @@ class UserDashboard(tk.Toplevel):
             self.lbl_balance.config(text=f"{bal:.2f}€", fg="#2ecc71" if bal >= 0 else "#e74c3c")
 
     def refresh_tables(self):
-        # Clear
         for i in self.tree_pending.get_children(): self.tree_pending.delete(i)
         for i in self.tree_history.get_children(): self.tree_history.delete(i)
 
         with get_connection() as conn:
             cursor = conn.cursor()
 
-            # 1. PENDING (Negative amounts, NOT settled)
-            # We look for transactions of type 'despesa' OR just negative amounts that are not settled
+            # PENDING
             cursor.execute("""
                 SELECT transaction_id, payment_date, notes, amount
                 FROM transactions
@@ -227,13 +253,10 @@ class UserDashboard(tk.Toplevel):
                 ORDER BY payment_date ASC
             """, (self.user_id,))
             for row in cursor.fetchall():
-                d_str = row[1].split(" ")[0] # Just date
+                d_str = row[1].split(" ")[0]
                 self.tree_pending.insert("", "end", values=(row[0], d_str, row[2], f"{row[3]:.2f}€"))
 
-            # 2. HISTORY (Positive amounts OR Settled debts)
-            # Actually, history usually shows PAYMENTS (Positive).
-            # If a debt is settled, it's still a debt record, but we want to see the Payment that covered it.
-            # So we list all transactions where amount > 0 (Incomes)
+            # HISTORY
             cursor.execute("""
                 SELECT payment_date, notes, amount, payment_method
                 FROM transactions
@@ -250,12 +273,13 @@ class UserDashboard(tk.Toplevel):
         months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"]
         year = datetime.now().year
 
-        # Fetch Status
+        # Fetch Status (is_paid, amount_due)
         status = {}
         with get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT month, is_paid FROM monthly_fees WHERE user_id=? AND year=?", (self.user_id, year))
-            for r in cursor.fetchall(): status[r[0]] = r[1]
+            cursor.execute("SELECT month, is_paid, amount_due FROM monthly_fees WHERE user_id=? AND year=?", (self.user_id, year))
+            for r in cursor.fetchall(): 
+                status[r[0]] = {"paid": r[1], "amt": r[2]}
 
         # Insurance & Annual
         self.create_q_btn(0, "Seguro", status.get(0), row=0, col=0, width=15)
@@ -267,27 +291,74 @@ class UserDashboard(tk.Toplevel):
         for i, m in enumerate(months):
             self.create_q_btn(i+1, m, status.get(i+1), parent=m_frame, row=0, col=i, width=5)
 
-    def create_q_btn(self, mid, text, is_paid, parent=None, row=0, col=0, width=10):
+    def create_q_btn(self, mid, text, data, parent=None, row=0, col=0, width=10):
         if not parent: parent = self.grid_frame
+        
+        is_paid = data["paid"] if data else 0
+        amount = data["amt"] if data else 0
 
-        # Color Logic
-        if is_paid: color = "#27ae60" # Green
-        elif mid in range(1, 13) and self.monthly_fee_value <= 0: color = "#bdc3c7" # Disabled
-        else: color = "#c0392b" # Red (Default for unpaid)
+        # --- COLOR LOGIC ---
+        if is_paid:
+            if amount == 0:
+                color = "#3498db" # BLUE = Absent / Free
+            else:
+                color = "#27ae60" # GREEN = Paid
+        elif mid in range(1, 13) and self.monthly_fee_value <= 0:
+            color = "#bdc3c7" # GREY = Disabled/Not applicable
+        else:
+            color = "#c0392b" # RED = Unpaid
 
         tk.Button(parent, text=text, bg=color, fg="white", width=width,
                   command=lambda: self.on_quota_click(mid, text, is_paid)).grid(row=row, column=col, padx=2)
 
+    def on_quota_click(self, month_id, label, is_paid):
+        if is_paid: return
+        if month_id in range(1, 13) and self.monthly_fee_value <= 0: return
+
+        # Default amount logic
+        def_amt = 0.0
+        if month_id == 0: def_amt = 15.0 # Insurance
+        elif month_id == 13: def_amt = 40.0 # Annual
+        else: def_amt = self.monthly_fee_value
+
+        # --- STEP 1: Ask Action (Pay vs Absent) ---
+        choice_dlg = QuotaActionDialog(self, label)
+        if not choice_dlg.action: return
+
+        # --- STEP 2: Process Action ---
+        if choice_dlg.action == "absent":
+            if messagebox.askyesno("Confirmar Ausência", f"Marcar '{label}' como Ausente/Isento?\n(O valor a pagar será 0.00€)"):
+                # Insert as Paid but with 0 amount
+                with get_connection() as conn:
+                    conn.execute("""
+                        INSERT INTO monthly_fees (user_id, month, year, amount_due, is_paid, paid_date)
+                        VALUES (?, ?, ?, 0, 1, DATE('now'))
+                        ON CONFLICT(user_id, month, year) DO UPDATE SET is_paid=1, amount_due=0
+                    """, (self.user_id, month_id, datetime.now().year))
+                self.refresh_quota_grid()
+
+        elif choice_dlg.action == "pay":
+            # Proceed to Payment Dialog
+            dlg = TransactionDialog(self, f"Pagar {label}", is_expense=False, default_amount=def_amt)
+            if dlg.result:
+                # 1. Register transaction
+                self.execute_transaction(dlg.result['amount'], f"Quota: {label}", method=dlg.result['method'])
+                # 2. Update monthly_fees table
+                with get_connection() as conn:
+                    conn.execute("""
+                        INSERT INTO monthly_fees (user_id, month, year, amount_due, is_paid, paid_date)
+                        VALUES (?, ?, ?, ?, 1, DATE('now'))
+                        ON CONFLICT(user_id, month, year) DO UPDATE SET is_paid=1, amount_due=?
+                    """, (self.user_id, month_id, datetime.now().year, dlg.result['amount'], dlg.result['amount']))
+                self.refresh_quota_grid()
+
     # --- ACTIONS ---
 
     def add_expense(self):
-        # Open Dialog
         dlg = TransactionDialog(self, "Nova Despesa", is_expense=True)
         if dlg.result:
-            # Add negative transaction
             amt = -abs(dlg.result['amount'])
             note = dlg.result['description']
-
             self.execute_transaction(amt, note, method=None, is_settled=0)
 
     def add_generic_payment(self):
@@ -304,41 +375,14 @@ class UserDashboard(tk.Toplevel):
         amount_needed = abs(float(vals[3].replace("€", "")))
 
         if messagebox.askyesno("Liquidar", f"Deseja liquidar a dívida:\n'{desc}' ({amount_needed}€)?"):
-            # Ask for method
             dlg = TransactionDialog(self, f"Liquidar: {desc}", is_expense=False, default_amount=amount_needed)
             if dlg.result:
-                # 1. Register Payment
                 self.execute_transaction(dlg.result['amount'], f"Pagamento: {desc}", method=dlg.result['method'])
-                # 2. Mark Debt as Settled
                 with get_connection() as conn:
                     conn.execute("UPDATE transactions SET is_settled=1 WHERE transaction_id=?", (t_id,))
                 self.refresh_tables()
 
-    def on_quota_click(self, month_id, label, is_paid):
-        if is_paid: return
-        if month_id in range(1, 13) and self.monthly_fee_value <= 0: return # Skip if no monthly fee
-
-        # Default amount logic
-        def_amt = 0.0
-        if month_id == 0: def_amt = 15.0 # Insurance
-        elif month_id == 13: def_amt = 40.0 # Annual
-        else: def_amt = self.monthly_fee_value
-
-        dlg = TransactionDialog(self, f"Pagar {label}", is_expense=False, default_amount=def_amt)
-        if dlg.result:
-            # 1. Register transaction
-            self.execute_transaction(dlg.result['amount'], f"Quota: {label}", method=dlg.result['method'])
-            # 2. Update monthly_fees table
-            with get_connection() as conn:
-                conn.execute("""
-                    INSERT INTO monthly_fees (user_id, month, year, amount_due, is_paid, paid_date)
-                    VALUES (?, ?, ?, ?, 1, DATE('now'))
-                    ON CONFLICT(user_id, month, year) DO UPDATE SET is_paid=1
-                """, (self.user_id, month_id, datetime.now().year, dlg.result['amount']))
-            self.refresh_quota_grid()
-
     def execute_transaction(self, amount, note, method=None, is_settled=1):
-        """Core DB writer"""
         type_name = "pagamento" if amount > 0 else "despesa"
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -349,5 +393,4 @@ class UserDashboard(tk.Toplevel):
 
             cursor.execute("UPDATE users SET current_balance = current_balance + ? WHERE user_id = ?", (amount, self.user_id))
             conn.commit()
-
         self.refresh_all()
