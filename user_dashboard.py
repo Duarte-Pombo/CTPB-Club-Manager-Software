@@ -16,6 +16,11 @@ class TransactionDialog(tk.Toplevel):
         self.is_expense = is_expense
         self.transient(parent)
         self.grab_set()
+        
+        self.update_idletasks()
+        x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (400 // 2)
+        y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (350 // 2)
+        self.geometry(f"+{x}+{y}")
 
         tk.Label(self, text="Categoria / Descrição:", font=("Arial", 10, "bold")).pack(pady=(20, 5))
 
@@ -38,6 +43,7 @@ class TransactionDialog(tk.Toplevel):
         self.amount_var = tk.DoubleVar(value=default_amount)
         self.entry_amount = tk.Entry(self, textvariable=self.amount_var, width=15, justify="center", font=("Arial", 12))
         self.entry_amount.pack()
+        self.entry_amount.focus_set() 
 
         self.method_var = tk.StringVar(value="Numerário")
         if not is_expense:
@@ -47,6 +53,8 @@ class TransactionDialog(tk.Toplevel):
 
         btn_frame = tk.Frame(self)
         btn_frame.pack(pady=30)
+        self.bind('<Return>', lambda e: self.on_confirm())
+        
         tk.Button(btn_frame, text="Confirmar", bg="#27ae60", fg="white", command=self.on_confirm).pack(side="left", padx=10)
         tk.Button(btn_frame, text="Cancelar", bg="#c0392b", fg="white", command=self.destroy).pack(side="left", padx=10)
         self.wait_window(self)
@@ -68,27 +76,64 @@ class TransactionDialog(tk.Toplevel):
         self.destroy()
 
 class QuotaActionDialog(tk.Toplevel):
+    """Initial Action: Pay Full, Partial or Absent"""
     def __init__(self, parent, month_name):
         super().__init__(parent)
         self.title(f"Ação: {month_name}")
+        self.geometry("400x200")
+        self.action = None
+        self.transient(parent)
+        self.grab_set()
+        
+        self.update_idletasks()
+        x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (400 // 2)
+        y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (200 // 2)
+        self.geometry(f"+{x}+{y}")
+
+        tk.Label(self, text=f"Quota: {month_name}", font=("Arial", 12, "bold")).pack(pady=10)
+        
+        btn_frame = tk.Frame(self)
+        btn_frame.pack(pady=10, fill="x", padx=10)
+
+        tk.Button(btn_frame, text="💰 Total", bg="#27ae60", fg="white", command=self.set_pay, height=2, width=12).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="⚠️ Parcial", bg="#f1c40f", fg="black", command=self.set_partial, height=2, width=12).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="🚫 Ausente", bg="#7f8c8d", fg="white", command=self.set_absent, height=2, width=12).pack(side="left", padx=5)
+
+        self.wait_window(self)
+
+    def set_pay(self): self.action = "pay"; self.destroy()
+    def set_partial(self): self.action = "partial"; self.destroy()
+    def set_absent(self): self.action = "absent"; self.destroy()
+
+class QuotaManageDialog(tk.Toplevel):
+    """Management Action: Pay Rest or Cancel"""
+    def __init__(self, parent, month_name, is_partial=False):
+        super().__init__(parent)
+        self.title(f"Gerir: {month_name}")
         self.geometry("350x180")
         self.action = None
         self.transient(parent)
         self.grab_set()
+        
+        self.update_idletasks()
+        x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (350 // 2)
+        y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (180 // 2)
+        self.geometry(f"+{x}+{y}")
 
-        tk.Label(self, text=f"Quota: {month_name}", font=("Arial", 12, "bold")).pack(pady=15)
+        tk.Label(self, text=f"Gerir Quota: {month_name}", font=("Arial", 12, "bold")).pack(pady=15)
+        
         btn_frame = tk.Frame(self)
-        btn_frame.pack(pady=20, fill="x", padx=20)
-        tk.Button(btn_frame, text="💰 Pagar Quota", bg="#27ae60", fg="white", command=self.set_pay, height=2).pack(side="left", fill="x", expand=True, padx=5)
-        tk.Button(btn_frame, text="🚫 Marcar Ausente", bg="#7f8c8d", fg="white", command=self.set_absent, height=2).pack(side="right", fill="x", expand=True, padx=5)
+        btn_frame.pack(pady=10, fill="x", padx=10)
+
+        if is_partial:
+            tk.Button(btn_frame, text="💰 Liquidar Restante", bg="#2980b9", fg="white", command=self.set_pay_rest, height=2).pack(side="left", fill="x", expand=True, padx=5)
+
+        tk.Button(btn_frame, text="🗑️ Anular / Devolver", bg="#c0392b", fg="white", command=self.set_cancel, height=2).pack(side="right", fill="x", expand=True, padx=5)
+
         self.wait_window(self)
 
-    def set_pay(self):
-        self.action = "pay"
-        self.destroy()
-    def set_absent(self):
-        self.action = "absent"
-        self.destroy()
+    def set_pay_rest(self): self.action = "pay_rest"; self.destroy()
+    def set_cancel(self): self.action = "cancel"; self.destroy()
 
 def get_connection():
     return sqlite3.connect(DB_NAME, timeout=10)
@@ -102,7 +147,6 @@ class UserDashboard(tk.Toplevel):
         self.membership_type = user_data[7]
         self.monthly_fee_value = user_data[8]
         
-        # Current viewing year for Quotas
         self.current_quota_year = tk.IntVar(value=datetime.now().year)
 
         self.title(f"Painel de Sócio: {self.full_name}")
@@ -132,13 +176,11 @@ class UserDashboard(tk.Toplevel):
         main_frame = tk.Frame(self, bg="#ecf0f1")
         main_frame.pack(side="right", expand=True, fill="both", padx=20, pady=20)
 
-        # --- QUOTA HEADER WITH YEAR SELECTOR ---
+        # Quota Header
         q_header = tk.Frame(main_frame, bg="#ecf0f1")
         q_header.pack(fill="x", pady=5)
-        
         tk.Label(q_header, text="Estado das Quotas", font=("Arial", 12, "bold"), bg="#ecf0f1").pack(side="left")
         
-        # Year Selector Controls
         year_ctrl = tk.Frame(q_header, bg="#ecf0f1")
         year_ctrl.pack(side="right")
         tk.Button(year_ctrl, text="<", command=lambda: self.change_year(-1), width=3).pack(side="left")
@@ -146,17 +188,15 @@ class UserDashboard(tk.Toplevel):
         self.lbl_year.pack(side="left", padx=5)
         tk.Button(year_ctrl, text=">", command=lambda: self.change_year(1), width=3).pack(side="left")
 
-        # Quota Grid Frame
         self.grid_frame = tk.Frame(main_frame, bg="#ecf0f1")
         self.grid_frame.pack(fill="x", pady=5)
 
-        # Tables
         split_frame = tk.Frame(main_frame, bg="#ecf0f1")
         split_frame.pack(fill="both", expand=True, pady=10)
 
+        # Pending
         left_box = tk.LabelFrame(split_frame, text="⚠️ Dívidas Pendentes", bg="#ecf0f1", font=("Arial", 10, "bold"), fg="#c0392b")
         left_box.pack(side="left", fill="both", expand=True, padx=(0, 10))
-        
         cols_pend = ("ID", "Data", "Desc", "Valor")
         self.tree_pending = ttk.Treeview(left_box, columns=cols_pend, show="headings")
         self.tree_pending.heading("ID", text="#"); self.tree_pending.column("ID", width=30)
@@ -165,11 +205,11 @@ class UserDashboard(tk.Toplevel):
         self.tree_pending.heading("Valor", text="Valor"); self.tree_pending.column("Valor", width=60, anchor="e")
         self.tree_pending.pack(fill="both", expand=True, pady=5)
         self.tree_pending.bind("<Double-1>", self.on_pending_double_click)
-        tk.Label(left_box, text="* Duplo clique para liquidar", bg="#ecf0f1", fg="grey", font=("Arial", 8)).pack(anchor="w")
+        tk.Label(left_box, text="* Duplo clique para liquidar (sem confirmação)", bg="#ecf0f1", fg="grey", font=("Arial", 8)).pack(anchor="w")
 
+        # History
         right_box = tk.LabelFrame(split_frame, text="📜 Histórico de Pagamentos", bg="#ecf0f1", font=("Arial", 10, "bold"), fg="#27ae60")
         right_box.pack(side="right", fill="both", expand=True)
-        
         cols_hist = ("Data", "Desc", "Valor", "Método")
         self.tree_history = ttk.Treeview(right_box, columns=cols_hist, show="headings")
         self.tree_history.heading("Data", text="Data"); self.tree_history.column("Data", width=90)
@@ -211,7 +251,7 @@ class UserDashboard(tk.Toplevel):
         for w in self.grid_frame.winfo_children(): w.destroy()
         
         months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"]
-        year = self.current_quota_year.get() # USE THE SELECTED YEAR
+        year = self.current_quota_year.get()
 
         status = {}
         with get_connection() as conn:
@@ -232,39 +272,97 @@ class UserDashboard(tk.Toplevel):
         is_paid = data["paid"] if data else 0
         amount = data["amt"] if data else 0
         
-        if is_paid:
-            color = "#3498db" if amount == 0 else "#27ae60"
-        elif mid in range(1, 13) and self.monthly_fee_value <= 0:
-            color = "#bdc3c7"
-        else:
-            color = "#c0392b"
+        # COLOR LOGIC
+        if is_paid == 1: color = "#3498db" if amount == 0 else "#27ae60"
+        elif is_paid == 2: color = "#f1c40f"
+        elif mid in range(1, 13) and self.monthly_fee_value <= 0: color = "#bdc3c7"
+        else: color = "#c0392b"
         
-        tk.Button(parent, text=text, bg=color, fg="white", width=width,
-                  command=lambda: self.on_quota_click(mid, text, is_paid)).grid(row=row, column=col, padx=2)
+        tk.Button(parent, text=text, bg=color, fg="white" if color != "#f1c40f" else "black", width=width,
+                  command=lambda: self.on_quota_click(mid, text, is_paid, amount)).grid(row=row, column=col, padx=2)
 
-    def on_quota_click(self, month_id, label, is_paid):
-        if is_paid: return
+    def on_quota_click(self, month_id, label, is_paid, current_amount_paid):
+        selected_year = self.current_quota_year.get()
+
+        # Define Full Amount Goal
+        full_amt = 0.0
+        if month_id == 0: full_amt = 15.0
+        elif month_id == 13: full_amt = 40.0
+        else: full_amt = self.monthly_fee_value
+
+        # --- ALREADY PAID or PARTIAL ---
+        if is_paid in [1, 2]: 
+            # Open Management Dialog
+            dlg = QuotaManageDialog(self, f"{label} {selected_year}", is_partial=(is_paid==2))
+            
+            if dlg.action == "cancel":
+                # Logic: Refund Money, Delete Transaction, Reset Status
+                self.cancel_quota_payment(month_id, selected_year, label, current_amount_paid)
+
+            elif dlg.action == "pay_rest":
+                # Logic: Calculate difference and pay
+                remaining = max(0, full_amt - current_amount_paid)
+                pay_dlg = TransactionDialog(self, f"Liquidar Restante: {label}", is_expense=False, default_amount=remaining)
+                if pay_dlg.result:
+                    new_val = pay_dlg.result['amount']
+                    self.execute_transaction(new_val, f"Quota (Restante): {label} ({selected_year})", method=pay_dlg.result['method'])
+                    
+                    # Update DB: Add new amount to existing, set is_paid to 1 if fully paid (assuming they pay remainder)
+                    total_paid = current_amount_paid + new_val
+                    status = 1 if total_paid >= full_amt else 2
+                    self.save_fee(month_id, selected_year, total_paid, status)
+            return
+
+        # --- UNPAID (RED) ---
         if month_id in range(1, 13) and self.monthly_fee_value <= 0: return
-
-        def_amt = 0.0
-        if month_id == 0: def_amt = 15.0
-        elif month_id == 13: def_amt = 40.0
-        else: def_amt = self.monthly_fee_value
 
         choice_dlg = QuotaActionDialog(self, label)
         if not choice_dlg.action: return
-
-        selected_year = self.current_quota_year.get()
 
         if choice_dlg.action == "absent":
             if messagebox.askyesno("Confirmar Ausência", f"Marcar '{label}' de {selected_year} como Ausente/Isento?"):
                 self.save_fee(month_id, selected_year, 0, 1)
 
         elif choice_dlg.action == "pay":
-            dlg = TransactionDialog(self, f"Pagar {label} {selected_year}", is_expense=False, default_amount=def_amt)
+            dlg = TransactionDialog(self, f"Pagar {label} {selected_year}", is_expense=False, default_amount=full_amt)
             if dlg.result:
                 self.execute_transaction(dlg.result['amount'], f"Quota: {label} ({selected_year})", method=dlg.result['method'])
                 self.save_fee(month_id, selected_year, dlg.result['amount'], 1)
+
+        elif choice_dlg.action == "partial":
+            dlg = TransactionDialog(self, f"Pagamento Parcial {label}", is_expense=False, default_amount=0.0)
+            if dlg.result:
+                self.execute_transaction(dlg.result['amount'], f"Parcial: {label} ({selected_year})", method=dlg.result['method'])
+                self.save_fee(month_id, selected_year, dlg.result['amount'], 2)
+
+    def cancel_quota_payment(self, month, year, label, amount_to_refund):
+        """Deletes transaction records and updates balance"""
+        if not messagebox.askyesno("Confirmar Anulação", f"Deseja anular o pagamento de {amount_to_refund}€?\nO movimento será apagado e o estado voltará a 'Não Pago'."):
+            return
+
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # 1. Update User Balance (Remove the money that was added)
+                cursor.execute("UPDATE users SET current_balance = current_balance - ? WHERE user_id = ?", (amount_to_refund, self.user_id))
+                
+                # 2. Delete Transaction(s)
+                # We delete transactions that look like this quota payment for this user
+                # We use LIKE to catch "Quota: Jan...", "Parcial: Jan...", "Quota (Restante): Jan..."
+                pattern = f"%{label} ({year})%"
+                cursor.execute("DELETE FROM transactions WHERE user_id=? AND amount > 0 AND notes LIKE ?", (self.user_id, pattern))
+                
+                # 3. Reset Monthly Fee
+                cursor.execute("UPDATE monthly_fees SET is_paid=0, amount_due=0 WHERE user_id=? AND month=? AND year=?", (self.user_id, month, year))
+                
+                conn.commit()
+            
+            messagebox.showinfo("Sucesso", "Pagamento anulado com sucesso.")
+            self.refresh_all()
+            
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao anular: {e}")
 
     def save_fee(self, month, year, amount, is_paid):
         with get_connection() as conn:
@@ -289,13 +387,15 @@ class UserDashboard(tk.Toplevel):
         item = self.tree_pending.selection()
         if not item: return
         vals = self.tree_pending.item(item, "values")
-        if messagebox.askyesno("Liquidar", f"Deseja liquidar a dívida:\n'{vals[2]}' ({vals[3]})?"):
-            dlg = TransactionDialog(self, f"Liquidar: {vals[2]}", is_expense=False, default_amount=abs(float(vals[3].replace("€",""))))
-            if dlg.result:
-                self.execute_transaction(dlg.result['amount'], f"Pagamento: {vals[2]}", method=dlg.result['method'])
-                with get_connection() as conn:
-                    conn.execute("UPDATE transactions SET is_settled=1 WHERE transaction_id=?", (vals[0],))
-                self.refresh_tables()
+        
+        amount_needed = abs(float(vals[3].replace("€","")))
+        dlg = TransactionDialog(self, f"Liquidar: {vals[2]}", is_expense=False, default_amount=amount_needed)
+        
+        if dlg.result:
+            self.execute_transaction(dlg.result['amount'], f"Pagamento: {vals[2]}", method=dlg.result['method'])
+            with get_connection() as conn:
+                conn.execute("UPDATE transactions SET is_settled=1 WHERE transaction_id=?", (vals[0],))
+            self.refresh_tables()
 
     def execute_transaction(self, amount, note, method=None, is_settled=1):
         type_name = "pagamento" if amount > 0 else "despesa"
