@@ -34,7 +34,7 @@ class MainDashboard(tk.Tk):
 
         tk.Label(tool_frame, text="🔍 Pesquisar:", bg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
         self.search_var = tk.StringVar()
-        # Using trace_add for Python 3.14 compatibility
+        # Trace add for Python 3.14 compatibility
         self.search_var.trace_add("write", lambda *args: self.refresh_users()) 
         
         entry_search = tk.Entry(tool_frame, textvariable=self.search_var, width=30, font=("Arial", 11))
@@ -82,12 +82,16 @@ class MainDashboard(tk.Tk):
 
         btn_style = {"bg": "#34495e", "fg": "white", "font": ("Arial", 10, "bold"), "bd": 0, "padx": 15, "pady": 10}
         
-        # Report Buttons
+        # Report Buttons (Left)
         tk.Button(bar_frame, text="📄 Relatório Mensal", command=self.generate_monthly_report, **btn_style).pack(side="left", padx=10, pady=10)
         tk.Button(bar_frame, text="📊 Relatório Anual", command=self.generate_yearly_report, **btn_style).pack(side="left", padx=10, pady=10)
         
-        # Admin Buttons
+        # Admin Buttons (Right)
+        # Order: [Reset] [Restore] [Backup]
         tk.Button(bar_frame, text="🔒 Cópia Segurança", command=self.backup_database, **btn_style).pack(side="right", padx=10, pady=10)
+        
+        tk.Button(bar_frame, text="📂 Restaurar Cópia", command=self.restore_database, **btn_style).pack(side="right", padx=10, pady=10)
+
         tk.Button(bar_frame, text="🗑️ Reset Database", bg="#c0392b", fg="white", font=("Arial", 10, "bold"), bd=0, padx=15, pady=10, 
                   command=self.reset_database).pack(side="right", padx=10, pady=10)
 
@@ -159,10 +163,9 @@ class MainDashboard(tk.Tk):
             except Exception as e:
                 messagebox.showerror("Erro", f"Erro ao desativar: {e}")
 
-    # --- DATABASE TOOLS (BACKUP & RESET) ---
+    # --- DATABASE TOOLS ---
 
     def backup_database(self):
-        """Creates a safe copy of the running database."""
         timestamp = datetime.now().strftime("%Y-%m-%d_%Hh%M")
         default_name = f"Backup_CTPB_{timestamp}.db"
         
@@ -173,32 +176,52 @@ class MainDashboard(tk.Tk):
             title="Guardar Cópia de Segurança"
         )
 
-        if not target_path:
-            return
+        if not target_path: return
 
         try:
-            # Using SQLite Online Backup API (Safe for running apps)
             src = sqlite3.connect(DB_NAME)
             dst = sqlite3.connect(target_path)
-            
-            with src, dst:
-                src.backup(dst)
-            
+            with src, dst: src.backup(dst)
             src.close()
             dst.close()
             messagebox.showinfo("Sucesso", f"Backup criado com sucesso em:\n{target_path}")
-
         except Exception as e:
             messagebox.showerror("Erro de Backup", f"Falha ao criar cópia: {e}")
 
+    def restore_database(self):
+        """Restores a backup file, overwriting the current database."""
+        backup_path = filedialog.askopenfilename(
+            filetypes=[("SQLite Database", "*.db"), ("All files", "*.*")],
+            title="Selecionar Cópia de Segurança para Restaurar"
+        )
+        if not backup_path: return
+
+        if not messagebox.askyesno("PERIGO - RESTAURAR DADOS", 
+                                   f"ATENÇÃO:\nIsto irá SOBREPOR a base de dados atual com a cópia selecionada.\n\nTodos os dados atuais serão perdidos.\n\nDeseja continuar?"):
+            return
+
+        try:
+            # We connect to the backup (src) and the live db (dst)
+            src = sqlite3.connect(backup_path)
+            dst = sqlite3.connect(DB_NAME)
+
+            with src, dst:
+                src.backup(dst) # Copy Backup -> Live
+            
+            src.close()
+            dst.close()
+            
+            self.refresh_users()
+            messagebox.showinfo("Sucesso", "Base de dados restaurada com sucesso!")
+
+        except Exception as e:
+            messagebox.showerror("Erro Crítico", f"Falha ao restaurar base de dados: {e}")
+
     def reset_database(self):
-        """Wipes all user data but keeps table structures."""
-        # Warning 1
         if not messagebox.askyesno("PERIGO - APAGAR TUDO", 
                                    "ATENÇÃO:\nIsto irá apagar TODOS os sócios, transações e registos.\n\nDeseja realmente continuar?"):
             return
 
-        # Warning 2 (Double confirmation)
         if not messagebox.askyesno("CONFIRMAÇÃO FINAL", 
                                    "Esta ação é IRREVERSÍVEL.\n\nTem a certeza absoluta que quer reiniciar a base de dados?"):
             return
@@ -206,27 +229,17 @@ class MainDashboard(tk.Tk):
         try:
             with get_connection() as conn:
                 cursor = conn.cursor()
-                
-                # Turn off Foreign Keys to allow deletion in any order
                 cursor.execute("PRAGMA foreign_keys = OFF")
-                
-                # Clear Tables
                 cursor.execute("DELETE FROM transactions")
                 cursor.execute("DELETE FROM monthly_fees")
                 cursor.execute("DELETE FROM audit_logs")
                 cursor.execute("DELETE FROM users")
-                
-                # Reset Auto-Increment Counters (IDs start from 1 again)
                 cursor.execute("DELETE FROM sqlite_sequence")
-                
-                # Note: We do NOT delete 'payment_types' as that is system config
-                
                 cursor.execute("PRAGMA foreign_keys = ON")
                 conn.commit()
 
             self.refresh_users()
             messagebox.showinfo("Reiniciado", "A base de dados foi limpa com sucesso.")
-
         except Exception as e:
             messagebox.showerror("Erro Crítico", f"Erro ao limpar base de dados: {e}")
 
