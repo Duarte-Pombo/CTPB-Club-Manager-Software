@@ -34,7 +34,7 @@ class MainDashboard(tk.Tk):
 
         tk.Label(tool_frame, text="🔍 Pesquisar:", bg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
         self.search_var = tk.StringVar()
-        # Trace add for Python 3.14 compatibility
+        # Using trace_add for Python 3.14 compatibility
         self.search_var.trace_add("write", lambda *args: self.refresh_users()) 
         
         entry_search = tk.Entry(tool_frame, textvariable=self.search_var, width=30, font=("Arial", 11))
@@ -87,8 +87,9 @@ class MainDashboard(tk.Tk):
         tk.Button(bar_frame, text="📊 Relatório Anual", command=self.generate_yearly_report, **btn_style).pack(side="left", padx=10, pady=10)
         
         # Admin Buttons
-        tk.Button(bar_frame, text="🔒 Cópia Segurança", command=self.not_implemented, **btn_style).pack(side="right", padx=10, pady=10)
-        tk.Button(bar_frame, text="🗑️ Reset Database", bg="#c0392b", fg="white", font=("Arial", 10, "bold"), bd=0, padx=15, pady=10, command=self.not_implemented).pack(side="right", padx=10, pady=10)
+        tk.Button(bar_frame, text="🔒 Cópia Segurança", command=self.backup_database, **btn_style).pack(side="right", padx=10, pady=10)
+        tk.Button(bar_frame, text="🗑️ Reset Database", bg="#c0392b", fg="white", font=("Arial", 10, "bold"), bd=0, padx=15, pady=10, 
+                  command=self.reset_database).pack(side="right", padx=10, pady=10)
 
     # --- MAIN LOGIC ---
 
@@ -102,7 +103,6 @@ class MainDashboard(tk.Tk):
         params = []
 
         if search_term:
-            # Concatenate first and last name for full name search
             query += " AND (lower(first_name || ' ' || last_name) LIKE ? OR CAST(user_id AS TEXT) LIKE ? OR nif LIKE ?)"
             term_wild = f"%{search_term}%"
             params.extend([term_wild, term_wild, term_wild])
@@ -159,28 +159,94 @@ class MainDashboard(tk.Tk):
             except Exception as e:
                 messagebox.showerror("Erro", f"Erro ao desativar: {e}")
 
+    # --- DATABASE TOOLS (BACKUP & RESET) ---
+
+    def backup_database(self):
+        """Creates a safe copy of the running database."""
+        timestamp = datetime.now().strftime("%Y-%m-%d_%Hh%M")
+        default_name = f"Backup_CTPB_{timestamp}.db"
+        
+        target_path = filedialog.asksaveasfilename(
+            defaultextension=".db",
+            filetypes=[("SQLite Database", "*.db"), ("All files", "*.*")],
+            initialfile=default_name,
+            title="Guardar Cópia de Segurança"
+        )
+
+        if not target_path:
+            return
+
+        try:
+            # Using SQLite Online Backup API (Safe for running apps)
+            src = sqlite3.connect(DB_NAME)
+            dst = sqlite3.connect(target_path)
+            
+            with src, dst:
+                src.backup(dst)
+            
+            src.close()
+            dst.close()
+            messagebox.showinfo("Sucesso", f"Backup criado com sucesso em:\n{target_path}")
+
+        except Exception as e:
+            messagebox.showerror("Erro de Backup", f"Falha ao criar cópia: {e}")
+
+    def reset_database(self):
+        """Wipes all user data but keeps table structures."""
+        # Warning 1
+        if not messagebox.askyesno("PERIGO - APAGAR TUDO", 
+                                   "ATENÇÃO:\nIsto irá apagar TODOS os sócios, transações e registos.\n\nDeseja realmente continuar?"):
+            return
+
+        # Warning 2 (Double confirmation)
+        if not messagebox.askyesno("CONFIRMAÇÃO FINAL", 
+                                   "Esta ação é IRREVERSÍVEL.\n\nTem a certeza absoluta que quer reiniciar a base de dados?"):
+            return
+
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Turn off Foreign Keys to allow deletion in any order
+                cursor.execute("PRAGMA foreign_keys = OFF")
+                
+                # Clear Tables
+                cursor.execute("DELETE FROM transactions")
+                cursor.execute("DELETE FROM monthly_fees")
+                cursor.execute("DELETE FROM audit_logs")
+                cursor.execute("DELETE FROM users")
+                
+                # Reset Auto-Increment Counters (IDs start from 1 again)
+                cursor.execute("DELETE FROM sqlite_sequence")
+                
+                # Note: We do NOT delete 'payment_types' as that is system config
+                
+                cursor.execute("PRAGMA foreign_keys = ON")
+                conn.commit()
+
+            self.refresh_users()
+            messagebox.showinfo("Reiniciado", "A base de dados foi limpa com sucesso.")
+
+        except Exception as e:
+            messagebox.showerror("Erro Crítico", f"Erro ao limpar base de dados: {e}")
+
     # --- REPORT LOGIC ---
 
     def generate_monthly_report(self):
-        # 1. Ask for Month and Year
         now = datetime.now()
         year = simpledialog.askinteger("Relatório Mensal", "Ano:", initialvalue=now.year, minvalue=2020, maxvalue=2030)
         if not year: return
         month = simpledialog.askinteger("Relatório Mensal", "Mês (1-12):", initialvalue=now.month, minvalue=1, maxvalue=12)
         if not month: return
 
-        # 2. Define Date Range (Start of month to End of month)
         start_date = f"{year}-{month:02d}-01"
-        if month == 12:
-            end_date = f"{year+1}-01-01"
-        else:
-            end_date = f"{year}-{month+1:02d}-01"
+        if month == 12: end_date = f"{year+1}-01-01"
+        else: end_date = f"{year}-{month+1:02d}-01"
 
         title = f"RELATÓRIO MENSAL - {month:02d}/{year}"
         self.build_and_save_report(title, start_date, end_date, f"Relatorio_Mensal_{month}_{year}.txt")
 
     def generate_yearly_report(self):
-        # 1. Ask for Year
         now = datetime.now()
         year = simpledialog.askinteger("Relatório Anual", "Ano:", initialvalue=now.year, minvalue=2020, maxvalue=2030)
         if not year: return
@@ -192,23 +258,16 @@ class MainDashboard(tk.Tk):
         self.build_and_save_report(title, start_date, end_date, f"Relatorio_Anual_{year}.txt")
 
     def build_and_save_report(self, title, start_date, end_date, default_filename):
-        """Core logic to fetch data, organize it, and save to file."""
-        
-        # Data Structure: { "Category": { "Method": Amount } }
         report_data = {}
-
         try:
             with get_connection() as conn:
                 cursor = conn.cursor()
-                # Fetch only INCOME (amount > 0) for the report
-                # If expenses are needed, remove 'amount > 0'
                 cursor.execute("""
                     SELECT amount, payment_method, notes, payment_date 
                     FROM transactions 
                     WHERE payment_date >= ? AND payment_date < ? AND amount > 0
                     ORDER BY payment_date
                 """, (start_date, end_date))
-                
                 rows = cursor.fetchall()
 
             if not rows:
@@ -218,46 +277,30 @@ class MainDashboard(tk.Tk):
             total_overall = 0.0
 
             for amt, method, note, date in rows:
-                # Categorization Logic based on 'notes' string
                 category = "Outros"
                 note_lower = note.lower()
 
-                if "quota:" in note_lower:
-                    # Example: "Quota: JAN" -> Category: "Quota: JAN"
-                    # Or group all quotas? Prompt implies "--- January Quota"
-                    category = note  # Keep the full string like "Quota: JAN" as header
-                elif "aluguer" in note_lower:
-                    category = "Alugueres"
-                elif "encordoamento" in note_lower:
-                    category = "Encordoamento"
-                elif "bar" in note_lower:
-                    category = "Bar"
-                elif "pagamento:" in note_lower:
-                    # This is debt repayment
-                    category = "Regularização Dívidas"
+                if "quota:" in note_lower: category = note 
+                elif "aluguer" in note_lower: category = "Alugueres"
+                elif "encordoamento" in note_lower: category = "Encordoamento"
+                elif "bar" in note_lower: category = "Bar"
+                elif "pagamento:" in note_lower: category = "Regularização Dívidas"
                 
-                # Sanitize method
                 if not method: method = "Indefinido"
 
-                # Initialize keys if missing
-                if category not in report_data:
-                    report_data[category] = {}
-                if method not in report_data[category]:
-                    report_data[category][method] = 0.0
+                if category not in report_data: report_data[category] = {}
+                if method not in report_data[category]: report_data[category][method] = 0.0
 
                 report_data[category][method] += amt
                 total_overall += amt
 
-            # --- FORMAT TEXT ---
             lines = []
             lines.append("="*40)
             lines.append(f"{title}")
             lines.append("="*40)
             lines.append("")
 
-            # Sort categories to keep "Quota" together if possible
             sorted_cats = sorted(report_data.keys())
-
             for cat in sorted_cats:
                 lines.append(f"--- {cat}")
                 cat_total = 0.0
@@ -273,7 +316,6 @@ class MainDashboard(tk.Tk):
             
             report_content = "\n".join(lines)
 
-            # --- SAVE FILE ---
             file_path = filedialog.asksaveasfilename(
                 defaultextension=".txt",
                 filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
@@ -282,11 +324,9 @@ class MainDashboard(tk.Tk):
             )
 
             if file_path:
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(report_content)
+                with open(file_path, "w", encoding="utf-8") as f: f.write(report_content)
                 messagebox.showinfo("Sucesso", f"Relatório guardado em:\n{file_path}")
             else:
-                # Fallback: Show in window if user cancels save
                 self.show_report_window(title, report_content)
 
         except Exception as e:
@@ -296,14 +336,10 @@ class MainDashboard(tk.Tk):
         win = tk.Toplevel(self)
         win.title(title)
         win.geometry("400x600")
-        
         txt = scrolledtext.ScrolledText(win, font=("Courier", 10))
         txt.pack(fill="both", expand=True)
         txt.insert("end", content)
         txt.config(state="disabled")
-
-    def not_implemented(self):
-        messagebox.showinfo("Em construção", "Esta funcionalidade será implementada no próximo passo.")
 
 if __name__ == "__main__":
     app = MainDashboard()
