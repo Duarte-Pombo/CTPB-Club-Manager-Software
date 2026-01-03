@@ -4,41 +4,35 @@ import threading
 import time
 import users
 import user_dashboard
+from dashboard_main import MainDashboard # Importing the new UI
 from smartcard.System import readers
 from smartcard.util import toHexString
 
-class CTPB:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Clube de Ténis de Paços de Brandão")
-        self.root.geometry("400x300")
-
-        # UI Elements
-        self.label = tk.Label(root, text="À espera de um cartão..", font=("Arial", 14))
-        self.label.pack(expand=True)
-        self.status_var = tk.StringVar(value="Status do Leitor: A verificar...")
-        self.status_label = tk.Label(root, textvariable=self.status_var, fg="blue")
-        self.status_label.pack(side="bottom", pady=10)
-
-        # Start the NFC listener thread
+class CTPB_App:
+    def __init__(self):
+        # Initialize the Main Dashboard Window
+        self.app = MainDashboard()
+        
+        # Start the NFC listener in a separate thread
         self.nfc_thread = threading.Thread(target=self.nfc_listener, daemon=True)
         self.nfc_thread.start()
 
+    def run(self):
+        self.app.mainloop()
+
     def nfc_listener(self):
         """Background thread that waits for NFC card taps."""
+        print("NFC Listener Started...")
         while True:
             try:
                 r = readers()
                 if not r:
-                    self.status_var.set("Status do Leitor: Não encontrado")
                     time.sleep(2)
                     continue
 
-                self.status_var.set(f"Status do Leitor: Connectado ({r[0]})")
                 reader = r[0]
                 connection = reader.createConnection()
 
-                # Try to connect to a card
                 try:
                     connection.connect()
                     GET_UID = [0xFF, 0xCA, 0x00, 0x00, 0x00]
@@ -46,31 +40,41 @@ class CTPB:
 
                     if sw1 == 0x90 and sw2 == 0x00:
                         card_id = toHexString(data)
-                        # Use root.after to trigger the popup safely from the main thread
-                        self.root.after(0, self.show_card_popup, card_id)
+                        print(f"Card Detected: {card_id}")
+                        
+                        # Trigger UI action safely from the main thread
+                        self.app.after(0, self.handle_card_tap, card_id)
 
-                        # Sleep briefly to avoid reading the same tap multiple times
+                        # Prevent multiple reads of the same tap
                         time.sleep(3)
-                except:
-                    # No card present, just loop again
+                except Exception:
                     pass
 
             except Exception as e:
-                print(f"Thread Error: {e}")
+                print(f"NFC Error: {e}")
 
             time.sleep(0.5)
 
-    def show_card_popup(self, card_id):
+    def handle_card_tap(self, card_id):
+        """Logic to handle what happens when a card is scanned."""
         user_data = users.get_user_by_card(card_id)
 
         if user_data:
-            # Open the new Dashboard instead of a simple messagebox
-            user_dashboard.UserDashboard(self.root, user_data)
+            # Check if user is active (Soft Delete check)
+            # user_data[10] is 'is_active' based on schema order
+            if not user_data[10]: 
+                messagebox.showwarning("Aviso", "Este cartão pertence a um sócio inativo.")
+                return
+
+            # Open Dashboard on top of Main Window
+            user_dashboard.UserDashboard(self.app, user_data)
+            # Refresh main list after closing dashboard (in case payments were made)
+            self.app.refresh_users()
         else:
             if messagebox.askyesno("Desconhecido", f"Cartão {card_id} não registado.\nDeseja registar?"):
-                users.UserRegistrationWindow(self.root, card_id)
+                users.UserRegistrationWindow(self.app, card_id)
+                self.app.refresh_users()
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = CTPB(root)
-    root.mainloop()
+    program = CTPB_App()
+    program.run()
