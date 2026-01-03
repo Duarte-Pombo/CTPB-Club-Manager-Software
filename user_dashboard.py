@@ -76,7 +76,6 @@ class TransactionDialog(tk.Toplevel):
         self.destroy()
 
 class QuotaActionDialog(tk.Toplevel):
-    """Initial Action: Pay Full, Partial or Absent"""
     def __init__(self, parent, month_name):
         super().__init__(parent)
         self.title(f"Ação: {month_name}")
@@ -106,7 +105,6 @@ class QuotaActionDialog(tk.Toplevel):
     def set_absent(self): self.action = "absent"; self.destroy()
 
 class QuotaManageDialog(tk.Toplevel):
-    """Management Action: Pay Rest or Cancel"""
     def __init__(self, parent, month_name, is_partial=False):
         super().__init__(parent)
         self.title(f"Gerir: {month_name}")
@@ -141,12 +139,19 @@ def get_connection():
 class UserDashboard(tk.Toplevel):
     def __init__(self, parent, user_data):
         super().__init__(parent)
+        # Assuming SELECT * structure: 
+        # 0:uid, 1:card, 2:fname, 3:lname, 4:email, 5:phone, 6:nif, 7:type, 8:fee
         self.user_id = user_data[0]
         self.card_id = user_data[1]
-        self.full_name = f"{user_data[2]} {user_data[3]}"
+        self.first_name = user_data[2]
+        self.last_name = user_data[3]
+        self.email = user_data[4]
+        self.phone = user_data[5]
+        self.nif = user_data[6]
         self.membership_type = user_data[7]
         self.monthly_fee_value = user_data[8]
         
+        self.full_name = f"{self.first_name} {self.last_name}"
         self.current_quota_year = tk.IntVar(value=datetime.now().year)
 
         self.title(f"Painel de Sócio: {self.full_name}")
@@ -162,9 +167,24 @@ class UserDashboard(tk.Toplevel):
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
 
+        # Avatar
         tk.Label(sidebar, text="👤", bg="#2c3e50", fg="white", font=("Arial", 50)).pack(pady=(30, 10))
+        
+        # Name
         tk.Label(sidebar, text=self.full_name, bg="#2c3e50", fg="white", font=("Arial", 14, "bold"), wraplength=260).pack()
-        tk.Label(sidebar, text=f"Cartão: {self.card_id}", bg="#2c3e50", fg="#bdc3c7").pack()
+        
+        # Card ID
+        tk.Label(sidebar, text=f"Cartão: {self.card_id}", bg="#2c3e50", fg="#bdc3c7", font=("Arial", 10, "bold")).pack(pady=(5, 10))
+        
+        # --- NEW: User Info Details ---
+        info_frame = tk.Frame(sidebar, bg="#2c3e50")
+        info_frame.pack(pady=5)
+        
+        tk.Label(info_frame, text=f"📧 {self.email}", bg="#2c3e50", fg="#95a5a6", font=("Arial", 9)).pack(anchor="center")
+        tk.Label(info_frame, text=f"📞 {self.phone}", bg="#2c3e50", fg="#95a5a6", font=("Arial", 9)).pack(anchor="center")
+        tk.Label(info_frame, text=f"🆔 {self.nif}", bg="#2c3e50", fg="#95a5a6", font=("Arial", 9)).pack(anchor="center")
+        # ------------------------------
+
         self.lbl_balance = tk.Label(sidebar, text="0.00€", bg="#2c3e50", fg="white", font=("Arial", 24, "bold"))
         self.lbl_balance.pack(pady=30)
 
@@ -205,7 +225,7 @@ class UserDashboard(tk.Toplevel):
         self.tree_pending.heading("Valor", text="Valor"); self.tree_pending.column("Valor", width=60, anchor="e")
         self.tree_pending.pack(fill="both", expand=True, pady=5)
         self.tree_pending.bind("<Double-1>", self.on_pending_double_click)
-        tk.Label(left_box, text="* Duplo clique para liquidar (sem confirmação)", bg="#ecf0f1", fg="grey", font=("Arial", 8)).pack(anchor="w")
+        tk.Label(left_box, text="* Duplo clique para liquidar", bg="#ecf0f1", fg="grey", font=("Arial", 8)).pack(anchor="w")
 
         # History
         right_box = tk.LabelFrame(split_frame, text="📜 Histórico de Pagamentos", bg="#ecf0f1", font=("Arial", 10, "bold"), fg="#27ae60")
@@ -273,8 +293,8 @@ class UserDashboard(tk.Toplevel):
         amount = data["amt"] if data else 0
         
         # COLOR LOGIC
-        if is_paid == 1: color = "#3498db" if amount == 0 else "#27ae60"
-        elif is_paid == 2: color = "#f1c40f"
+        if is_paid == 1: color = "#3498db" if amount == 0 else "#27ae60" # Blue(Absent) or Green(Paid)
+        elif is_paid == 2: color = "#f1c40f" # Yellow
         elif mid in range(1, 13) and self.monthly_fee_value <= 0: color = "#bdc3c7"
         else: color = "#c0392b"
         
@@ -284,36 +304,38 @@ class UserDashboard(tk.Toplevel):
     def on_quota_click(self, month_id, label, is_paid, current_amount_paid):
         selected_year = self.current_quota_year.get()
 
-        # Define Full Amount Goal
         full_amt = 0.0
         if month_id == 0: full_amt = 15.0
         elif month_id == 13: full_amt = 40.0
         else: full_amt = self.monthly_fee_value
 
-        # --- ALREADY PAID or PARTIAL ---
+        # --- CASE 1: HANDLE "AUSENTE" (Blue) ---
+        if is_paid == 1 and current_amount_paid == 0:
+            if messagebox.askyesno("Corrigir", f"O item '{label}' está marcado como Ausente.\nDeseja marcar como NÃO PAGO?"):
+                self.save_fee(month_id, selected_year, 0, 0)
+            return
+
+        # --- CASE 2: HANDLE PAID (Green) OR PARTIAL (Yellow) ---
         if is_paid in [1, 2]: 
-            # Open Management Dialog
             dlg = QuotaManageDialog(self, f"{label} {selected_year}", is_partial=(is_paid==2))
             
             if dlg.action == "cancel":
-                # Logic: Refund Money, Delete Transaction, Reset Status
+                # Refund logic for actual payments
                 self.cancel_quota_payment(month_id, selected_year, label, current_amount_paid)
 
             elif dlg.action == "pay_rest":
-                # Logic: Calculate difference and pay
                 remaining = max(0, full_amt - current_amount_paid)
                 pay_dlg = TransactionDialog(self, f"Liquidar Restante: {label}", is_expense=False, default_amount=remaining)
                 if pay_dlg.result:
                     new_val = pay_dlg.result['amount']
                     self.execute_transaction(new_val, f"Quota (Restante): {label} ({selected_year})", method=pay_dlg.result['method'])
                     
-                    # Update DB: Add new amount to existing, set is_paid to 1 if fully paid (assuming they pay remainder)
                     total_paid = current_amount_paid + new_val
                     status = 1 if total_paid >= full_amt else 2
                     self.save_fee(month_id, selected_year, total_paid, status)
             return
 
-        # --- UNPAID (RED) ---
+        # --- CASE 3: HANDLE UNPAID (Red) ---
         if month_id in range(1, 13) and self.monthly_fee_value <= 0: return
 
         choice_dlg = QuotaActionDialog(self, label)
@@ -336,31 +358,21 @@ class UserDashboard(tk.Toplevel):
                 self.save_fee(month_id, selected_year, dlg.result['amount'], 2)
 
     def cancel_quota_payment(self, month, year, label, amount_to_refund):
-        """Deletes transaction records and updates balance"""
-        if not messagebox.askyesno("Confirmar Anulação", f"Deseja anular o pagamento de {amount_to_refund}€?\nO movimento será apagado e o estado voltará a 'Não Pago'."):
+        """Deletes transaction records and updates balance (refunds user)"""
+        if not messagebox.askyesno("Confirmar Anulação", f"Deseja anular o pagamento de {amount_to_refund}€?\nO dinheiro será devolvido à conta corrente."):
             return
-
         try:
             with get_connection() as conn:
                 cursor = conn.cursor()
-                
-                # 1. Update User Balance (Remove the money that was added)
+                # 1. Update User Balance (Subtract the payment amount)
                 cursor.execute("UPDATE users SET current_balance = current_balance - ? WHERE user_id = ?", (amount_to_refund, self.user_id))
-                
                 # 2. Delete Transaction(s)
-                # We delete transactions that look like this quota payment for this user
-                # We use LIKE to catch "Quota: Jan...", "Parcial: Jan...", "Quota (Restante): Jan..."
                 pattern = f"%{label} ({year})%"
                 cursor.execute("DELETE FROM transactions WHERE user_id=? AND amount > 0 AND notes LIKE ?", (self.user_id, pattern))
-                
                 # 3. Reset Monthly Fee
                 cursor.execute("UPDATE monthly_fees SET is_paid=0, amount_due=0 WHERE user_id=? AND month=? AND year=?", (self.user_id, month, year))
-                
                 conn.commit()
-            
-            messagebox.showinfo("Sucesso", "Pagamento anulado com sucesso.")
             self.refresh_all()
-            
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao anular: {e}")
 

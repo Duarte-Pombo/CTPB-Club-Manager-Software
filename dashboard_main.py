@@ -275,19 +275,30 @@ class MainDashboard(tk.Tk):
 
     # --- EVENTS ---
     def on_double_click(self, event):
-        item = self.tree.selection()
-        if not item: return
-        user_id = self.tree.item(item, "values")[0]
+        try:
+            item = self.tree.selection()
+            if not item: return
+            user_id = self.tree.item(item, "values")[0]
 
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-            user_data = cursor.fetchone()
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+                user_data = cursor.fetchone()
 
-        if user_data:
-            user_dashboard.UserDashboard(self, user_data)
-            self.wait_window(self.children.get(self.focus_get())) 
-            self.refresh_users()
+            if user_data:
+                # Store the dashboard window instance
+                dash = user_dashboard.UserDashboard(self, user_data)
+                
+                # Wait for it to close
+                self.wait_window(dash) 
+                
+                # Only refresh if the Main Window (self) is still open/alive
+                if self.winfo_exists():
+                    self.refresh_users()
+
+        except (tk.TclError, Exception):
+            # If the program is closing, ignore errors
+            pass
 
     def on_single_click(self, event):
         region = self.tree.identify("region", event.x, event.y)
